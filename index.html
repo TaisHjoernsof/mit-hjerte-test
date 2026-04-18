@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Kompasset til dit Hjertes Begær</title>
+  <link rel="icon" type="image/png" href="static/Compass.png" />
+  <link rel="apple-touch-icon" href="static/Compass.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Kompasset" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0a0a0f url('static/Pirate Map.jpg') center center / cover no-repeat fixed;
+      color: #c0392b;
+      text-shadow: 0 0 4px #000, 0 0 8px #000, 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+      font-family: 'Georgia', serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      overflow: hidden;
+      padding: 24px 16px;
+      user-select: none;
+    }
+
+    /* ── Status bar ── */
+    #status {
+      font-size: 13px;
+      letter-spacing: 0.08em;
+      text-align: center;
+      min-height: 36px;
+    }
+    #status.error { color: #e07060; opacity: 1; }
+    #status.ok    { color: #90c090; opacity: 1; }
+
+    /* ── Compass stage ── */
+    #compass-wrap {
+      position: relative;
+      width: min(80vw, 80vh);
+      height: min(80vw, 80vh);
+      flex-shrink: 0;
+    }
+
+    #compass-wrap img,
+    #compass-wrap .placeholder {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* Placeholder face — shown until compass-face.png exists */
+    #face-placeholder {
+      border-radius: 50%;
+      background: radial-gradient(circle at 50% 50%,
+        #1c1a12 0%, #2a2510 60%, #1a1508 100%);
+      box-shadow:
+        0 0 0 6px #6b5a2a,
+        0 0 0 10px #3a3010,
+        0 0 40px rgba(0,0,0,0.8);
+    }
+
+    /* Cardinal tick marks on placeholder */
+    #face-placeholder::before {
+      content: '';
+      position: absolute;
+      inset: 8%;
+      border-radius: 50%;
+      border: 2px solid rgba(180,150,60,0.3);
+    }
+
+    /* Cardinal labels */
+    #cardinal-labels {
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+    }
+    .cardinal {
+      position: absolute;
+      font-size: clamp(12px, 3vw, 18px);
+      font-weight: bold;
+      letter-spacing: 0.05em;
+      color: #c8a84a;
+      transform: translate(-50%, -50%);
+    }
+    #cN { top: 10%; left: 50%; }
+    #cS { top: 90%; left: 50%; }
+    #cE { top: 50%; left: 90%; }
+    #cW { top: 50%; left: 10%; }
+
+    /* Placeholder needle */
+    #needle-placeholder {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform-origin: center;
+      transition: transform 0.15s ease-out;
+    }
+    #needle-placeholder svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    #face-img {
+      transform: scale(0.95);
+    }
+
+    /* Real needle image (hidden until file exists) */
+    #needle-img {
+      transform-origin: center;
+      transition: transform 0.15s ease-out;
+      display: none; /* shown by JS once loaded */
+    }
+
+    /* Center dot */
+    #center-dot {
+      position: absolute;
+      width: 5%;
+      height: 5%;
+      background: radial-gradient(circle, #c8a84a, #6b5a2a);
+      border-radius: 50%;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px rgba(200,168,74,0.6);
+      z-index: 10;
+    }
+
+    /* ── Info panel ── */
+    #info {
+      text-align: center;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      line-height: 1.8;
+    }
+    #distance-display {
+      font-size: clamp(20px, 6vw, 32px);
+      letter-spacing: 0.1em;
+    }
+
+    /* ── Music toggle ── */
+    #music-btn {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      background: transparent;
+      border: 1px solid #c0392b;
+      color: #e74c3c;
+      font-size: 18px;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+      z-index: 100;
+    }
+    #music-btn:active { background: rgba(192,57,43,0.3); }
+
+    /* ── Intro video ── */
+    #intro-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: opacity 0.4s ease-out;
+    }
+    #intro-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    #intro-video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    #intro-start {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #c8a84a;
+      font-family: 'Georgia', serif;
+      font-size: clamp(16px, 4vw, 22px);
+      letter-spacing: 0.15em;
+      cursor: pointer;
+      background: #000;
+      text-align: center;
+      padding: 24px;
+    }
+    #intro-start.hidden { display: none; }
+
+    /* ── Permission button ── */
+    #permission-btn {
+      display: none;
+      padding: 14px 32px;
+      background: transparent;
+      border: 1px solid #6b5a2a;
+      color: #c8a84a;
+      font-family: 'Georgia', serif;
+      font-size: 15px;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: background 0.2s;
+    }
+    #permission-btn:active { background: rgba(107,90,42,0.3); }
+  </style>
+</head>
+<body>
+
+  <div id="intro-overlay">
+    <video id="intro-video" src="static/Skeleton.mp4" playsinline preload="auto"></video>
+    <div id="intro-start">TAP TO BEGIN</div>
+  </div>
+
+  <audio id="bg-music" src="static/Pirater.mp3" loop preload="auto"></audio>
+  <button id="music-btn" title="Toggle music">♪</button>
+
+  <div id="status">Initializing...</div>
+
+  <div id="compass-wrap">
+    <img id="face-img" src="static/Compass.png" alt=""
+         onerror="this.style.display='none'; document.getElementById('face-placeholder').style.display='block';"
+         onload="this.style.display='block'; document.getElementById('face-placeholder').style.display='none';"
+         style="display:none" />
+    <div id="face-placeholder"></div>
+
+
+    <!-- Rotating layer: swap src to "compass-needle.svg" (or .png) when ready -->
+    <!-- Image must point UP (north) at 0° rotation, centered in a square canvas -->
+    <img id="needle-img" src="compass-needle.svg" alt=""
+         onerror="this.style.display='none'; document.getElementById('needle-placeholder').style.display='flex';"
+         style="display:none" />
+
+    <!-- Placeholder needle (two-tone arrow) -->
+    <div id="needle-placeholder">
+      <svg viewBox="-50 -50 100 100" xmlns="http://www.w3.org/2000/svg">
+        <!-- North half — red, points up -->
+        <polygon points="0,-44 7,0 -7,0" fill="#c0392b" />
+        <!-- South half — cream -->
+        <polygon points="0,44 7,0 -7,0" fill="#e8d5a3" />
+        <!-- Center ring -->
+        <circle cx="0" cy="0" r="5" fill="#1c1a12" stroke="#6b5a2a" stroke-width="1.5"/>
+      </svg>
+    </div>
+
+    <div id="center-dot"></div>
+  </div>
+
+  <div id="info">
+    <div id="distance-display">— km</div>
+  </div>
+
+  <script>
+    // ── TARGET COORDINATES ────────────────────────────────────────────────────
+    // Change these to wherever the compass should always point
+    const TARGET_LAT =  55.68515;
+    const TARGET_LNG =  12.55261;
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const statusEl  = document.getElementById('status');
+    const needlePH  = document.getElementById('needle-placeholder');
+    const needleImg = document.getElementById('needle-img');
+    const distanceEl = document.getElementById('distance-display');
+
+    needleImg.onload  = () => { needleImg.style.display = 'block'; needlePH.style.display = 'none'; };
+    needleImg.onerror = () => { needleImg.style.display = 'none';  needlePH.style.display = 'flex'; };
+    needleImg.src = needleImg.src;
+
+    let userLat = null, userLng = null;
+    let deviceHeading = null;
+
+    // EMA smoothing state for heading (stored as sin/cos to handle 0°/360° wrap)
+    let hSin = null, hCos = null;
+    const H_ALPHA = 0.15; // lower = smoother but laggier
+
+    // EMA smoothing for GPS
+    const G_ALPHA = 0.3;
+
+    // rAF gate — only recalculate once per frame regardless of event rate
+    let rafPending = false;
+    function scheduleUpdate() {
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => { rafPending = false; updateNeedle(); });
+    }
+
+    // ── Geolocation ──────────────────────────────────────────────────────────
+    // iOS Safari prompts per call, so we only use watchPosition (one prompt,
+    // and it fires the first fix immediately after the user grants access).
+    let geoStarted = false;
+    function startGeolocation() {
+      if (geoStarted) return;
+      geoStarted = true;
+      if (!navigator.geolocation) {
+        setStatus('Geolocation not supported', 'error');
+        return;
+      }
+      navigator.geolocation.watchPosition(onPosition, onGeoError, {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+      });
+      navigator.geolocation.getCurrentPosition(onPosition, () => {}, {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 60000,
+      });
+    }
+
+    function onPosition(pos) {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      userLat = userLat == null ? lat : G_ALPHA * lat + (1 - G_ALPHA) * userLat;
+      userLng = userLng == null ? lng : G_ALPHA * lng + (1 - G_ALPHA) * userLng;
+      scheduleUpdate();
+    }
+
+    function onGeoError(err) {
+      if (err.code === err.TIMEOUT) return;
+      setStatus(`Location error: ${err.message}`, 'error');
+    }
+
+    // ── Device orientation ────────────────────────────────────────────────────
+    // Prefer deviceorientationabsolute; fall back to deviceorientation only if
+    // absolute never fires — avoids double-firing when both events are dispatched.
+    let usingAbsolute = false;
+
+    function startOrientation() {
+      window.addEventListener('deviceorientationabsolute', onAbsoluteOrientation, true);
+      window.addEventListener('deviceorientation', onRelativeOrientation, true);
+    }
+
+    function onAbsoluteOrientation(e) {
+      if (e.alpha == null) return;
+      usingAbsolute = true;
+      applyHeading(e.webkitCompassHeading != null
+        ? e.webkitCompassHeading
+        : (360 - e.alpha) % 360);
+    }
+
+    function onRelativeOrientation(e) {
+      // Skip if absolute events are already being received
+      if (usingAbsolute || e.alpha == null) return;
+      applyHeading(e.webkitCompassHeading != null
+        ? e.webkitCompassHeading
+        : (360 - e.alpha) % 360);
+    }
+
+    function applyHeading(raw) {
+      const r = raw * Math.PI / 180;
+      // Seed on first reading, then EMA on sin/cos components
+      if (hSin == null) {
+        hSin = Math.sin(r);
+        hCos = Math.cos(r);
+      } else {
+        hSin = H_ALPHA * Math.sin(r) + (1 - H_ALPHA) * hSin;
+        hCos = H_ALPHA * Math.cos(r) + (1 - H_ALPHA) * hCos;
+      }
+      deviceHeading = (Math.atan2(hSin, hCos) * 180 / Math.PI + 360) % 360;
+      scheduleUpdate();
+    }
+
+    // iOS 13+ requires explicit permission, triggered from a user gesture.
+    // We call this from the intro tap so there's no extra button to press.
+    function requestOrientationPermission() {
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(state => {
+            if (state === 'granted') startOrientation();
+            else setStatus('Orientation permission denied', 'error');
+          })
+          .catch(err => setStatus(`Permission error: ${err}`, 'error'))
+          .finally(() => startGeolocation());
+      } else {
+        startOrientation();
+        startGeolocation();
+      }
+    }
+
+    setStatus('Locating...', '');
+
+    // ── Bearing & distance & render ───────────────────────────────────────────
+    function calcBearing(lat1, lng1, lat2, lng2) {
+      const toRad = d => d * Math.PI / 180;
+      const dLng  = toRad(lng2 - lng1);
+      const φ1 = toRad(lat1), φ2 = toRad(lat2);
+      const y = Math.sin(dLng) * Math.cos(φ2);
+      const x = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(dLng);
+      return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+    }
+
+    function calcDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371000; // Earth radius in metres
+      const toRad = d => d * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.asin(Math.sqrt(a));
+    }
+
+    function formatDistance(m) {
+      if (m < 1000) return `${Math.round(m)} m`;
+      if (m < 10000) return `${(m / 1000).toFixed(1)} km`;
+      return `${Math.round(m / 1000)} km`;
+    }
+
+    function updateNeedle() {
+      if (userLat == null) { setStatus('Waiting for location...', ''); return; }
+
+      const bearing = calcBearing(userLat, userLng, TARGET_LAT, TARGET_LNG);
+      const dist    = calcDistance(userLat, userLng, TARGET_LAT, TARGET_LNG);
+      distanceEl.textContent = formatDistance(dist);
+
+      let rotation;
+      if (deviceHeading != null) {
+        rotation = bearing - deviceHeading;
+        setStatus('Compass active', 'ok');
+      } else {
+        rotation = bearing;
+        setStatus('No orientation sensor — north-up bearing', '');
+      }
+
+      const transform = `rotate(${rotation}deg)`;
+      needlePH.style.transform  = transform;
+      needleImg.style.transform = transform;
+    }
+
+    function setStatus(msg, type) {
+      statusEl.textContent = msg;
+      statusEl.className   = type || '';
+    }
+
+    // ── Music ─────────────────────────────────────────────────────────────────
+    const audio     = document.getElementById('bg-music');
+    const musicBtn  = document.getElementById('music-btn');
+    let musicOn     = true;
+    let audioUnlocked = false;
+    let introDone   = false;
+
+    function unlockAndPlay() {
+      if (audioUnlocked || !introDone) return;
+      audioUnlocked = true;
+      if (musicOn) audio.play().catch(() => {});
+    }
+
+    document.addEventListener('pointerdown', unlockAndPlay);
+
+    musicBtn.addEventListener('click', () => {
+      musicOn = !musicOn;
+      musicBtn.textContent = musicOn ? '♪' : '♩';
+      if (musicOn) {
+        audioUnlocked = true;
+        audio.play().catch(() => {});
+      } else {
+        audio.pause();
+      }
+    });
+
+    // ── Intro video ───────────────────────────────────────────────────────────
+    const introOverlay = document.getElementById('intro-overlay');
+    const introVideo   = document.getElementById('intro-video');
+    const introStart   = document.getElementById('intro-start');
+    let introStarted   = false;
+
+    function finishIntro() {
+      if (introDone) return;
+      introDone = true;
+      introOverlay.classList.add('hidden');
+      setTimeout(() => introOverlay.remove(), 500);
+      if (musicOn) audio.play().catch(() => {});
+    }
+
+    function startIntro() {
+      if (introStarted) { finishIntro(); return; }
+      introStarted = true;
+      introStart.classList.add('hidden');
+      // Order matters on iOS Safari: requestPermission must be FIRST in the
+      // user gesture — audio.play() can consume the activation token.
+      requestOrientationPermission();
+      // Unlock audio while we're inside the user gesture so iOS allows play() later
+      audio.play().then(() => { audio.pause(); audio.currentTime = 0; audioUnlocked = true; }).catch(() => {});
+      introVideo.play().catch(finishIntro);
+    }
+
+    introVideo.addEventListener('ended', finishIntro);
+    introVideo.addEventListener('error', finishIntro);
+    introOverlay.addEventListener('click', startIntro);
+  </script>
+</body>
+</html>
